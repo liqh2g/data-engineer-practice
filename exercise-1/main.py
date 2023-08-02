@@ -1,42 +1,50 @@
+import aiohttp
+import asyncio
 import os
-import requests
 from zipfile import ZipFile
 
-download_uris = [
-    "https://divvy-tripdata.s3.amazonaws.com/Divvy_Trips_2018_Q4.zip",
+async def download_image(url, destination_folder):   
+    li = url.rsplit("/",1)[1]
+    file_name = li.split(".")[0]
+    # destination_path = os.path.join(destination_folder, file_name)
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            if response.status == 200:
+                with open(file_name + ".zip", 'wb') as f:
+                    while True:
+                        chunk = await response.content.read(1024)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                with ZipFile(file_name + ".zip","r") as zipObject:
+                    listOfFileNames = zipObject.namelist()
+                    for file in listOfFileNames:
+                        if file.endswith('.csv'):
+                            zipObject.extract(file_name + ".csv")
+                if os.path.exists(file_name + ".zip"):
+                    os.remove(file_name + ".zip")
+            else:
+                print(f"Failed to download {file_name}.")
+
+async def main():
+    destination_folder = 'downloads'
+    if not os.path.exists(destination_folder):
+        os.makedirs(destination_folder)
+    
+    os.chdir(destination_folder)
+    image_urls = [
+        "https://divvy-tripdata.s3.amazonaws.com/Divvy_Trips_2018_Q4.zip",
     "https://divvy-tripdata.s3.amazonaws.com/Divvy_Trips_2019_Q1.zip",
     "https://divvy-tripdata.s3.amazonaws.com/Divvy_Trips_2019_Q2.zip",
     "https://divvy-tripdata.s3.amazonaws.com/Divvy_Trips_2019_Q3.zip",
     "https://divvy-tripdata.s3.amazonaws.com/Divvy_Trips_2019_Q4.zip",
     "https://divvy-tripdata.s3.amazonaws.com/Divvy_Trips_2020_Q1.zip",
     "https://divvy-tripdata.s3.amazonaws.com/Divvy_Trips_2220_Q1.zip"
-]
+    ]
 
-def get_file_name(url):
-    li = url.rsplit("/",1)[1]
-    file_name = li.split(".")[0]
-    return file_name
+    tasks = [download_image(url, destination_folder) for url in image_urls]
+    await asyncio.gather(*tasks)
 
-def main():
-    directory = "downloads"
-
-    if not os.path.exists(directory):
-        os.mkdir(directory)
-    os.chdir(directory)
-    
-    for uri in download_uris:
-            res = requests.get(uri)
-            file_name = get_file_name(uri)
-
-            open(file_name + '.zip','wb').write(res.content)
-
-            with ZipFile(file_name+'.zip', 'r') as zipObject:
-                listOfFileNames = zipObject.namelist()
-                for fileName in listOfFileNames:
-                     if fileName.endswith('.csv'):
-                          zipObject.extract(file_name + '.csv')
-            if os.path.exists(file_name+'.zip'):
-                 os.remove(file_name+'.zip')
-
-if __name__ == '__main__':
-     main()
+if __name__ == "__main__":
+    asyncio.run(main())
